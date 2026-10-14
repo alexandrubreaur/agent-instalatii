@@ -1,45 +1,68 @@
 import streamlit as st
 import google.generativeai as genai
-import os
+from pypdf import PdfReader
 
-# Setam titlul si configuratia paginii
 st.set_page_config(page_title="Agent Instalatii", layout="wide")
 st.title("Asistent Normative Proiectare Instalatii")
 
-# Preluam cheia API (o vom introduce ulterior dintr-un meniu securizat in Streamlit)
 api_key = st.secrets.get("GOOGLE_API_KEY", "")
 
 if not api_key:
     st.warning("Adauga cheia Google API in setarile Streamlit pentru a continua.")
     st.stop()
 
-# Configuram modelul
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Initializam istoricul conversatiei
+# Meniu lateral pentru incarcarea fișierelor PDF
+st.sidebar.header("Documente si Normative")
+uploaded_files = st.sidebar.file_uploader(
+    "Incarca normativele PDF (ex: I5, I7, P118)", 
+    type=["pdf"], 
+    accept_multiple_files=True
+)
+
+# Extragerea textului din PDF-urile incarcate
+context_text = ""
+if uploaded_files:
+    for file in uploaded_files:
+        pdf_reader = PdfReader(file)
+        for page in pdf_reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                context_text += extracted + "\n"
+    st.sidebar.success(f"Incarcat cu succes! Procesate {len(uploaded_files)} fisiere.")
+
+# Initializarea istoricului conversatiei
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Afisam mesajele anterioare
+# Afisarea mesajelor din istoric
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Gestionam input-ul utilizatorului
+# Intrebarea utilizatorului
 if prompt := st.chat_input("Adreseaza o intrebare despre normative..."):
-    # Adaugam si afisam mesajul utilizatorului
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generam raspunsul cu Gemini
     with st.chat_message("assistant"):
         try:
-            # Apelam modelul cu mesajul utilizatorului
-            response = model.generate_content(prompt)
+            if context_text:
+                full_prompt = (
+                    "Esti un inginer expert in proiectarea instalatiilor pentru constructii. "
+                    "Raspunde la intrebare bazandu-te strict pe informatiile din normativele furnizate mai jos. "
+                    "Citeaza articolele si capitolele relevante daca le gasesti in text.\n\n"
+                    f"TEXT NORMATIVE INCARCATE:\n{context_text}\n\n"
+                    f"INTREBARE: {prompt}"
+                )
+            else:
+                full_prompt = prompt
+
+            response = model.generate_content(full_prompt)
             st.markdown(response.text)
-            # Salvam raspunsul in istoric
             st.session_state.messages.append({"role": "assistant", "content": response.text})
         except Exception as e:
-            st.error(f"Eroare de conexiune cu API-ul: {e}")
+            st.error(f"Eroare la procesare: {e}")
