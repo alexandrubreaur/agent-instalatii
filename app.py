@@ -12,7 +12,7 @@ if not api_key:
     st.stop()
 
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+model = genai.GenerativeModel('gemini-3.6-flash')
 
 # Meniu lateral pentru incarcarea fișierelor PDF
 st.sidebar.header("Documente si Normative")
